@@ -3,38 +3,88 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.linear_model import LinearRegression
 
-st.set_page_config(page_title="Advanced Sales Analytics", layout="wide")
+st.title("🌍 Universal Data Analytics Dashboard")
 
-st.title("📊 Advanced Data-Driven Insight & Prediction System")
-
-# Upload file
-file = st.file_uploader("Upload your dataset (CSV)", type=["csv"])
+file = st.file_uploader("Upload any CSV dataset")
 
 if file:
-    # ---------------------------
-    # LOAD DATA (optimized)
-    # ---------------------------
     data = pd.read_csv(file, low_memory=False)
 
-    st.subheader("📄 Raw Data Preview")
+    st.subheader("📄 Data Preview")
     st.dataframe(data.head())
 
-    # ---------------------------
-    # AUTOMATED DATA CLEANING
-    # ---------------------------
-    st.subheader("🧹 Data Cleaning Process")
-
-    # Remove duplicates
+    # Cleaning
     data.drop_duplicates(inplace=True)
-
-    # Strip column names
     data.columns = data.columns.str.strip()
 
     # Fill missing values
-    for col in data.select_dtypes(include=np.number).columns:
+    for col in data.select_dtypes(include=np.number):
         data[col].fillna(data[col].median(), inplace=True)
+
+    for col in data.select_dtypes(include='object'):
+        data[col].fillna(data[col].mode()[0], inplace=True)
+
+    st.success("Data cleaned automatically ✅")
+
+    # Detect column types
+    numeric_cols = data.select_dtypes(include=np.number).columns.tolist()
+    categorical_cols = data.select_dtypes(include='object').columns.tolist()
+
+    st.subheader("📊 Column Selection")
+
+    x_axis = st.selectbox("Select X-axis", data.columns)
+    y_axis = st.selectbox("Select Y-axis", numeric_cols)
+
+    chart_type = st.selectbox("Select Chart Type", ["Bar", "Line", "Scatter"])
+
+    fig, ax = plt.subplots()
+
+    if chart_type == "Bar":
+        sns.barplot(x=x_axis, y=y_axis, data=data, ax=ax)
+
+    elif chart_type == "Line":
+        sns.lineplot(x=x_axis, y=y_axis, data=data, ax=ax)
+
+    elif chart_type == "Scatter":
+        sns.scatterplot(x=x_axis, y=y_axis, data=data, ax=ax)
+
+    st.pyplot(fig)
+
+    # Distribution
+    st.subheader("📉 Distribution")
+    num_col = st.selectbox("Select Numeric Column", numeric_cols)
+
+    fig, ax = plt.subplots()
+    sns.histplot(data[num_col], bins=30, ax=ax)
+    st.pyplot(fig)
+
+    # Correlation
+    st.subheader("🔥 Correlation Heatmap")
+    fig, ax = plt.subplots()
+    sns.heatmap(data[numeric_cols].corr(), annot=True, cmap="coolwarm", ax=ax)
+    st.pyplot(fig)
+
+    # Simple Prediction (optional)
+    st.subheader("🔮 Simple Prediction")
+
+    if len(numeric_cols) >= 2:
+        x_col = st.selectbox("Select Feature", numeric_cols)
+        y_col = st.selectbox("Select Target", numeric_cols, index=1)
+
+        from sklearn.linear_model import LinearRegression
+
+        X = data[[x_col]]
+        y = data[y_col]
+
+        model = LinearRegression()
+        model.fit(X, y)
+
+        val = st.number_input(f"Enter {x_col}")
+
+        if st.button("Predict"):
+            pred = model.predict([[val]])
+            st.success(f"Predicted {y_col}: {pred[0]:.2f}")        data[col].fillna(data[col].median(), inplace=True)
 
     for col in data.select_dtypes(include='object').columns:
         data[col].fillna(data[col].mode()[0], inplace=True)
