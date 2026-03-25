@@ -5,13 +5,14 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.linear_model import LinearRegression
 
-# Page config
-st.set_page_config(page_title="Advanced Data Analytics", layout="wide")
+st.set_page_config(page_title="Smart Data Analytics System", layout="wide")
 
-st.title("📊 Data-Driven Insight Generation & Prediction System")
+st.title("📊 Smart Data Analytics & Prediction Dashboard")
 
-# Upload dataset
-file = st.file_uploader("Upload your dataset (CSV)", type=["csv"])
+# -------------------------
+# FILE UPLOAD
+# -------------------------
+file = st.file_uploader("Upload CSV Dataset", type=["csv"])
 
 if file:
     # -------------------------
@@ -19,14 +20,14 @@ if file:
     # -------------------------
     data = pd.read_csv(file, low_memory=False)
 
-    st.subheader("📄 Data Preview")
+    st.subheader("📄 Raw Data Preview")
     st.dataframe(data.head())
 
     # -------------------------
-    # DATA CLEANING (AUTO)
+    # CLEANING
     # -------------------------
     data.drop_duplicates(inplace=True)
-    data.columns = data.columns.str.strip()
+    data.columns = data.columns.str.strip().str.lower().str.replace(" ", "_")
 
     # Fill missing values
     for col in data.select_dtypes(include=np.number).columns:
@@ -35,7 +36,14 @@ if file:
     for col in data.select_dtypes(include='object').columns:
         data[col].fillna(data[col].mode()[0], inplace=True)
 
-    st.success("✅ Data cleaned successfully")
+    # Convert numeric safely
+    for col in data.columns:
+        try:
+            data[col] = pd.to_numeric(data[col])
+        except:
+            pass
+
+    st.success("✅ Data cleaned automatically")
 
     # -------------------------
     # COLUMN DETECTION
@@ -43,63 +51,84 @@ if file:
     numeric_cols = data.select_dtypes(include=np.number).columns.tolist()
     categorical_cols = data.select_dtypes(include='object').columns.tolist()
 
+    # Detect date column
+    date_col = None
+    for col in data.columns:
+        if "date" in col:
+            date_col = col
+            break
+
+    if date_col:
+        data[date_col] = pd.to_datetime(data[date_col], errors='coerce')
+        data.dropna(subset=[date_col], inplace=True)
+
     # -------------------------
-    # KPI METRICS
+    # KPI DASHBOARD
     # -------------------------
     st.subheader("📊 Key Metrics")
 
     col1, col2, col3 = st.columns(3)
 
-    if "Sales" in data.columns:
-        col1.metric("Total Sales", f"{data['Sales'].sum():,.2f}")
+    if "sales" in data.columns:
+        col1.metric("Total Sales", f"{data['sales'].sum():,.2f}")
     else:
         col1.metric("Rows", len(data))
 
-    if "Profit" in data.columns:
-        col2.metric("Total Profit", f"{data['Profit'].sum():,.2f}")
+    if "profit" in data.columns:
+        col2.metric("Total Profit", f"{data['profit'].sum():,.2f}")
     else:
         col2.metric("Columns", len(data.columns))
 
     col3.metric("Total Records", len(data))
 
     # -------------------------
-    # SIDEBAR FILTERS
+    # SIDEBAR FILTER
     # -------------------------
-    st.sidebar.header("🔍 Filters")
+    st.sidebar.header("🔍 Filter")
 
     if len(categorical_cols) > 0:
-        selected_col = st.sidebar.selectbox("Filter Column", categorical_cols)
-        selected_val = st.sidebar.multiselect(
+        filter_col = st.sidebar.selectbox("Select Column", categorical_cols)
+        filter_val = st.sidebar.multiselect(
             "Select Values",
-            data[selected_col].unique(),
-            default=data[selected_col].unique()
+            data[filter_col].unique(),
+            default=data[filter_col].unique()
         )
-        data = data[data[selected_col].isin(selected_val)]
+        data = data[data[filter_col].isin(filter_val)]
 
     # -------------------------
-    # VISUALIZATION SECTION
+    # VISUALIZATION
     # -------------------------
     st.subheader("📊 Visualization")
 
     if len(numeric_cols) > 0:
-        x_axis = st.selectbox("Select X-axis", data.columns)
-        y_axis = st.selectbox("Select Y-axis", numeric_cols)
+        x_axis = st.selectbox("X-axis", data.columns)
+        y_axis = st.selectbox("Y-axis (numeric)", numeric_cols)
 
         chart_type = st.selectbox("Chart Type", ["Bar", "Line", "Scatter"])
 
+        plot_data = data[[x_axis, y_axis]].dropna()
+
+        # Reduce large categories
+        if plot_data[x_axis].nunique() > 20:
+            plot_data = plot_data.groupby(x_axis)[y_axis].mean().reset_index().head(20)
+
         fig, ax = plt.subplots()
 
-        if chart_type == "Bar":
-            sns.barplot(x=x_axis, y=y_axis, data=data, ax=ax)
+        try:
+            if chart_type == "Bar":
+                sns.barplot(x=x_axis, y=y_axis, data=plot_data, ax=ax)
 
-        elif chart_type == "Line":
-            sns.lineplot(x=x_axis, y=y_axis, data=data, ax=ax)
+            elif chart_type == "Line":
+                sns.lineplot(x=x_axis, y=y_axis, data=plot_data, ax=ax)
 
-        elif chart_type == "Scatter":
-            sns.scatterplot(x=x_axis, y=y_axis, data=data, ax=ax)
+            elif chart_type == "Scatter":
+                sns.scatterplot(x=x_axis, y=y_axis, data=plot_data, ax=ax)
 
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
+            plt.xticks(rotation=45)
+            st.pyplot(fig)
+
+        except Exception as e:
+            st.error(f"Graph error: {e}")
 
     # -------------------------
     # DISTRIBUTION
@@ -107,14 +136,14 @@ if file:
     st.subheader("📉 Distribution")
 
     if len(numeric_cols) > 0:
-        num_col = st.selectbox("Select Column for Distribution", numeric_cols)
+        num_col = st.selectbox("Select Column", numeric_cols)
 
         fig, ax = plt.subplots()
-        sns.histplot(data[num_col], bins=30, ax=ax)
+        sns.histplot(data[num_col].dropna(), bins=30, ax=ax)
         st.pyplot(fig)
 
     # -------------------------
-    # CORRELATION HEATMAP
+    # HEATMAP
     # -------------------------
     st.subheader("🔥 Correlation Heatmap")
 
@@ -130,23 +159,24 @@ if file:
 
     if len(numeric_cols) > 0:
         max_col = numeric_cols[0]
-        max_value = data[max_col].max()
-        st.write(f"✔ Highest {max_col}: {max_value}")
+        st.write(f"✔ Highest value in {max_col}: {data[max_col].max()}")
 
-    st.write("✔ Data cleaned and processed automatically")
-    st.write("✔ Visual patterns identified using charts")
+    st.write("✔ Data cleaned and analyzed automatically")
+    st.write("✔ Trends visualized using charts")
 
     # -------------------------
-    # PREDICTION SYSTEM
+    # PREDICTION
     # -------------------------
-    st.subheader("🔮 Prediction (Linear Regression)")
+    st.subheader("🔮 Prediction System")
 
     if len(numeric_cols) >= 2:
-        x_col = st.selectbox("Select Feature (X)", numeric_cols)
-        y_col = st.selectbox("Select Target (Y)", numeric_cols, index=1)
+        x_col = st.selectbox("Feature (X)", numeric_cols)
+        y_col = st.selectbox("Target (Y)", numeric_cols, index=1)
 
-        X = data[[x_col]]
-        y = data[y_col]
+        df_model = data[[x_col, y_col]].dropna()
+
+        X = df_model[[x_col]]
+        y = df_model[y_col]
 
         model = LinearRegression()
         model.fit(X, y)
