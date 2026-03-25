@@ -1,194 +1,114 @@
-import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error
 
-st.set_page_config(page_title="Premium Data Dashboard", layout="wide")
+plt.style.use("ggplot")
 
-st.title("🚀 Advanced Data Analytics Dashboard")
+data = pd.read_csv("superstore.csv")
+data.head()
 
-# ---------------------------
-# FILE UPLOAD
-# ---------------------------
-file = st.file_uploader("Upload your dataset (CSV)", type=["csv"])
+print(data.columns)
+data.info()
 
-if file:
-    data = pd.read_csv(file, low_memory=False)
+data.columns = data.columns.str.strip()
 
-    # ---------------------------
-    # CLEANING
-    # ---------------------------
-    data.drop_duplicates(inplace=True)
-    data.columns = data.columns.str.strip().str.lower().str.replace(" ", "_")
+print(data.isnull().sum())
 
-    for col in data.select_dtypes(include=np.number):
-        data[col].fillna(data[col].median(), inplace=True)
+data = data.drop_duplicates()
 
-    for col in data.select_dtypes(include='object'):
-        data[col].fillna(data[col].mode()[0], inplace=True)
+data.describe()
 
-    # Convert numeric safely
-    for col in data.columns:
-        try:
-            data[col] = pd.to_numeric(data[col])
-        except:
-            pass
+top_products = data.groupby("Product Name")["Sales"].sum().sort_values(ascending=False).head(10)
 
-    # Detect date column
-    date_col = None
-    for col in data.columns:
-        if "date" in col:
-            date_col = col
-            break
+plt.figure(figsize=(10,5))
+top_products.plot(kind="bar")
 
-    if date_col:
-        data[date_col] = pd.to_datetime(data[date_col], errors='coerce')
-        data.dropna(subset=[date_col], inplace=True)
+plt.title("Top 10 Selling Products")
+plt.xlabel("Product Name")
+plt.ylabel("Total Sales")
 
-    # Column types
-    numeric_cols = data.select_dtypes(include=np.number).columns.tolist()
-    categorical_cols = data.select_dtypes(include='object').columns.tolist()
+plt.show()
 
-    st.success("✅ Data cleaned & processed")
+plt.figure(figsize=(8,5))
 
-    # ---------------------------
-    # KPI DASHBOARD
-    # ---------------------------
-    st.subheader("📊 Key Metrics")
+sns.barplot(x="Category", y="Sales", data=data)
 
-    c1, c2, c3 = st.columns(3)
+plt.title("Sales by Category")
 
-    if "sales" in data.columns:
-        c1.metric("Total Sales", f"{data['sales'].sum():,.0f}")
-    else:
-        c1.metric("Rows", len(data))
+plt.show()
 
-    if "profit" in data.columns:
-        c2.metric("Total Profit", f"{data['profit'].sum():,.0f}")
-    else:
-        c2.metric("Columns", len(data.columns))
+plt.figure(figsize=(8,5))
 
-    c3.metric("Records", len(data))
+sns.barplot(x="Region", y="Profit", data=data)
 
-    # ---------------------------
-    # SIDEBAR FILTERS
-    # ---------------------------
-    st.sidebar.header("🔍 Smart Filters")
+plt.title("Profit by Region")
 
-    if categorical_cols:
-        filter_col = st.sidebar.selectbox("Select Filter Column", categorical_cols)
-        filter_val = st.sidebar.multiselect(
-            "Select Values",
-            data[filter_col].unique(),
-            default=data[filter_col].unique()
-        )
-        data = data[data[filter_col].isin(filter_val)]
+plt.show()
 
-    # ---------------------------
-    # AUTO TIME ANALYSIS
-    # ---------------------------
-    if date_col:
-        st.subheader("📈 Time Series Analysis")
+data["Order Date"] = pd.to_datetime(data["Order Date"])
 
-        monthly = data.groupby(data[date_col].dt.to_period("M"))["sales"].sum()
+monthly_sales = data.groupby(data["Order Date"].dt.month)["Sales"].sum()
 
-        fig, ax = plt.subplots()
-        monthly.plot(marker="o", ax=ax)
-        st.pyplot(fig)
+plt.figure(figsize=(8,5))
 
-    # ---------------------------
-    # TOP PRODUCTS
-    # ---------------------------
-    if "product" in data.columns:
-        st.subheader("🏆 Top Products")
+monthly_sales.plot(marker="o")
 
-        top_products = data.groupby("product")["sales"].sum().nlargest(10)
+plt.title("Monthly Sales Trend")
+plt.xlabel("Month")
+plt.ylabel("Sales")
 
-        fig, ax = plt.subplots()
-        top_products.plot(kind="barh", ax=ax)
-        st.pyplot(fig)
+plt.show()
 
-    # ---------------------------
-    # SMART VISUALIZATION
-    # ---------------------------
-    st.subheader("📊 Smart Visualization")
+plt.figure(figsize=(8,5))
+sns.scatterplot(x="Sales", y="Profit", data=data)
+plt.title("Sales vs Profit")
+plt.show()
 
-    x_axis = st.selectbox("Select X-axis", data.columns)
-    y_axis = st.selectbox("Select Y-axis", numeric_cols)
+plt.figure(figsize=(8,6))
+sns.heatmap(data.corr(numeric_only=True), annot=True, cmap="coolwarm")
+plt.title("Correlation Heatmap")
+plt.show()
 
-    fig, ax = plt.subplots()
+plt.figure(figsize=(8,5))
+sns.histplot(data["Sales"], bins=30)
+plt.title("Sales Distribution")
+plt.show()
 
-    try:
-        if x_axis in categorical_cols:
-            st.info("📊 Using BAR chart (best for categories)")
-            data.groupby(x_axis)[y_axis].mean().head(20).plot(kind="bar", ax=ax)
+top_regions = data.groupby("Region")["Profit"].sum().sort_values(ascending=False).head(10)
+plt.figure(figsize=(10,5))
+top_regions.plot(kind="bar")
+plt.title("Profit by Region")
+plt.ylabel("Profit")
+plt.show()
 
-        elif x_axis in numeric_cols:
-            st.info("🔍 Using SCATTER chart (numeric comparison)")
-            ax.scatter(data[x_axis], data[y_axis])
+X = data[["Sales"]]
+y = data["Profit"]
 
-        elif "date" in x_axis:
-            st.info("📈 Using LINE chart (time-based)")
-            temp = data.groupby(data[x_axis])[y_axis].sum()
-            temp.plot(ax=ax)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
 
-        st.pyplot(fig)
+model = LinearRegression()
+model.fit(X_train, y_train)
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+predictions = model.predict(X_test)
 
-    # ---------------------------
-    # HEATMAP
-    # ---------------------------
-    st.subheader("🔥 Correlation Heatmap")
+error = mean_absolute_error(y_test, predictions)
+print("Mean Absolute Error:", error)
 
-    if len(numeric_cols) > 1:
-        fig, ax = plt.subplots()
-        sns.heatmap(data[numeric_cols].corr(), annot=True, cmap="coolwarm", ax=ax)
-        st.pyplot(fig)
+plt.figure(figsize=(8,5))
+plt.scatter(y_test, predictions)
+plt.xlabel("Actual Profit")
+plt.ylabel("Predicted Profit")
+plt.title("Actual vs Predicted Profit")
+plt.show()
 
-    # ---------------------------
-    # AUTO INSIGHTS
-    # ---------------------------
-    st.subheader("🧠 Key Insights")
-
-    if "sales" in data.columns and "product" in data.columns:
-        best_product = data.groupby("product")["sales"].sum().idxmax()
-        st.write(f"✔ Best selling product: **{best_product}**")
-
-    if date_col:
-        best_month = data.groupby(data[date_col].dt.month)["sales"].sum().idxmax()
-        st.write(f"✔ Highest sales month: **Month {best_month}**")
-
-    st.write("✔ Business performance trends identified")
-
-    # ---------------------------
-    # PREDICTION
-    # ---------------------------
-    st.subheader("🔮 Prediction System")
-
-    if len(numeric_cols) >= 2:
-        x_col = st.selectbox("Feature", numeric_cols)
-        y_col = st.selectbox("Target", numeric_cols, index=1)
-
-        df_model = data[[x_col, y_col]].dropna()
-
-        X = df_model[[x_col]]
-        y = df_model[y_col]
-
-        model = LinearRegression()
-        model.fit(X, y)
-
-        val = st.number_input(f"Enter {x_col}")
-
-        if st.button("Predict"):
-            pred = model.predict([[val]])
-            st.success(f"Predicted {y_col}: {pred[0]:.2f}")
-
-    # ---------------------------
-    # FOOTER
-    # ---------------------------
-    st.markdown("---")
-    st.markdown("✨ Developed for Data Analytics Project | Streamlit Dashboard")
+results = pd.DataFrame({
+    "Actual Profit": y_test.values,
+    "Predicted Profit": predictions
+})
+print("Actual vs Predicted Profit")
+print(results.head(10))
